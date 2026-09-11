@@ -16,8 +16,18 @@ class SimulationServiceBackend:
         jobs = await self._get_json("/api/v1/simulations")
         return jobs if isinstance(jobs, list) else []
 
-    async def create_job(self, form: dict[str, Any]) -> dict[str, Any]:
-        job = await self._request_json("POST", "/api/v1/simulations", data=form)
+    async def create_job(
+        self,
+        *,
+        files: dict[str, tuple[str, bytes, str]],
+        data: dict[str, str],
+    ) -> dict[str, Any]:
+        job = await self._request_json(
+            "POST",
+            "/api/v1/simulations",
+            data=data,
+            files=files,
+        )
         return job if isinstance(job, dict) else {}
 
     async def get_job(self, job_id: str) -> dict[str, Any]:

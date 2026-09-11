@@ -20,7 +20,14 @@ def make_settings(tmp_path: Path, backend_url: str = "http://simulation-service.
 
 def make_backend() -> FastAPI:
     backend = FastAPI()
+    backend.state.create_responses = [
+        {
+            "job_id": "842ee7cf-fb8a-4341-a1ed-9cf87aad83ab",
+            "status": "RECEIVED",
+    }
+    ]
     backend.state.jobs = []
+    backend.state.received_forms = []
 
     @backend.get("/api/v1/simulations")
     def list_jobs() -> list[dict[str, Any]]:
@@ -29,9 +36,27 @@ def make_backend() -> FastAPI:
     @backend.post("/api/v1/simulations", status_code=202)
     async def create_job(request: FastAPIRequest) -> dict[str, Any]:
         form = await request.form()
+        package = form["package_step"]
+        original = form["original_step"]
+        backend.state.received_forms.append(
+            {
+                "fields": sorted(form.keys()),
+                "package": (
+                    await package.read()
+                    if not isinstance(package, str)
+                    else package.encode()
+                ),
+                "original": (
+                    await original.read()
+                    if not isinstance(original, str)
+                    else original.encode()
+                ),
+            }
+        )
+        response = dict(backend.state.create_responses[0])
         backend.state.jobs.append(
             {
-                "job_id": "842ee7cf-fb8a-4341-a1ed-9cf87aad83ab",
+                "job_id": response["job_id"],
                 "status": "RECEIVED",
                 "system_status": "RUNNING",
                 "profile_id": str(form["profile_id"]),
@@ -39,10 +64,7 @@ def make_backend() -> FastAPI:
                 "updated_at": "2026-09-11T14:30:00Z",
             }
         )
-        return {
-            "job_id": "842ee7cf-fb8a-4341-a1ed-9cf87aad83ab",
-            "status": "RECEIVED",
-        }
+        return response
 
     @backend.get("/api/v1/simulations/{job_id}")
     def get_job(job_id: str) -> dict[str, Any]:
@@ -184,6 +206,35 @@ def test_dashboard_uploads_step_files_and_polls_job(tmp_path: Path) -> None:
     assert poll.status_code == 200
     assert detail["result"]["process"]["summary"]["peak_temperature_celsius"] == 920
     assert detail["result"]["artifacts"]["model.inp"].startswith("/api/v1/simulations/")
+
+
+def test_dashboard_forwards_multipart_fields_to_simulation_service(
+    tmp_path: Path,
+) -> None:
+    backend = make_backend()
+    backend.state.create_responses[0] = {"job_id": "forwarded-job", "status": "RECEIVED"}
+
+    app = create_app(
+        make_settings(tmp_path),
+        transport=httpx.ASGITransport(backend),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/simulations",
+        data={"profile_id": "default"},
+        files={
+            "package_step": ("package.step", b"package step", "application/step"),
+            "original_step": ("original.step", b"original step", "application/step"),
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {"job_id": "forwarded-job", "status": "RECEIVED"}
+    received = backend.state.received_forms[0]
+    assert received["fields"] == ["original_step", "package_step", "profile_id"]
+    assert received["package"] == b"package step"
+    assert received["original"] == b"original step"
 
 
 def test_dashboard_proxies_artifact_download(tmp_path: Path) -> None:

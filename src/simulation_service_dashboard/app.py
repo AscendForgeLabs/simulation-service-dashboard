@@ -97,13 +97,24 @@ def create_app(
         original_step: UploadFile = File(...),
         profile_id: Annotated[str, Form()] = "default",
     ) -> dict[str, Any]:
-        form = {
-            "package_step": package_step,
-            "original_step": original_step,
-            "profile_id": profile_id,
-        }
+        package_content = await package_step.read()
+        original_content = await original_step.read()
         try:
-            response = await backend.create_job(form)
+            response = await backend.create_job(
+                files={
+                    "package_step": (
+                        package_step.filename or "package.step",
+                        package_content,
+                        package_step.content_type or "application/step",
+                    ),
+                    "original_step": (
+                        original_step.filename or "original.step",
+                        original_content,
+                        original_step.content_type or "application/step",
+                    ),
+                },
+                data={"profile_id": profile_id},
+            )
         except BackendUnavailable as error:
             raise _backend_error(error) from error
         if "job_id" not in response or "status" not in response:

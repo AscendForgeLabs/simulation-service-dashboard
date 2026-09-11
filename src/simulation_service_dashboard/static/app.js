@@ -57,7 +57,7 @@ async function request(path, options = {}) {
     let message = `HTTP ${response.status}`;
     try {
       const body = await response.json();
-      message = body.detail || JSON.stringify(body);
+      message = formatErrorDetail(body.detail ?? body);
     } catch (_) {
       // Keep the HTTP status as the message.
     }
@@ -639,6 +639,17 @@ function renderEvents(events) {
 function showGlobalError(message) {
   elements.jobError.textContent = message;
   elements.jobError.classList.remove("hidden");
+}
+
+function formatErrorDetail(detail) {
+  if (typeof detail === "string") return detail;
+  if (detail instanceof Error) return detail.message;
+  if (detail === null || detail === undefined) return "未知错误";
+  try {
+    return JSON.stringify(detail, null, 2);
+  } catch (_) {
+    return String(detail);
+  }
 }
 
 function statusText(status) {
