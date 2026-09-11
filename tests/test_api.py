@@ -143,6 +143,7 @@ def test_dashboard_page_serves_static_assets(tmp_path: Path) -> None:
     assert 'src="/assets/app.js"' in page.text
     assert stylesheet.status_code == 200
     assert script.status_code == 200
+    assert '<script src="/assets/app.js" defer></script>' in page.text
 
 
 def test_dashboard_lists_backend_simulations(tmp_path: Path) -> None:

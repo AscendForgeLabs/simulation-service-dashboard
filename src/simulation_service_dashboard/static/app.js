@@ -690,6 +690,10 @@ window.addEventListener("popstate", () => {
   if (jobId && jobId !== state.selectedJobId) selectJob(jobId, false);
 });
 
-await loadJobs();
-loadAnsys();
-schedulePolling();
+function initialize() {
+  loadJobs();
+  loadAnsys();
+  schedulePolling();
+}
+
+initialize();
