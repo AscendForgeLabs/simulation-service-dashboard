@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HIP Simulation Console</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">AscendForgeLabs</p>
+      <h1>HIP 仿真管理台</h1>
+    </div>
+    <div class="connection" id="connection">连接中</div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel jobs-panel">
+      <div class="panel-heading">
+        <h2>仿真任务</h2>
+        <button id="refresh-jobs" class="icon-button" type="button" title="刷新任务">
+          <span aria-hidden="true">⟳</span>
+        </button>
+      </div>
+      <form id="upload-form" class="upload-form">
+        <label>
+          <span>包套 STEP</span>
+          <input type="file" name="package_step" accept=".step,.stp" required>
+        </label>
+        <label>
+          <span>目标零件 STEP</span>
+          <input type="file" name="original_step" accept=".step,.stp" required>
+        </label>
+        <label>
+          <span>参数 Profile</span>
+          <select name="profile_id">
+            <option value="default">default</option>
+          </select>
+        </label>
+        <button type="submit" class="primary-button">提交仿真</button>
+      </form>
+      <div id="job-list" class="job-list"></div>
+    </aside>
+
+    <section class="workspace">
+      <section class="panel status-panel">
+        <div class="panel-heading">
+          <h2>运行状态</h2>
+          <div id="poll-state" class="muted">未选择任务</div>
+        </div>
+        <div id="status-grid" class="status-grid"></div>
+        <div id="job-error" class="alert hidden"></div>
+      </section>
+
+      <section class="panel process-panel">
+        <div class="panel-heading">
+          <h2>烧制过程</h2>
+          <div id="process-summary" class="process-summary"></div>
+        </div>
+        <div id="process-chart" class="process-chart"></div>
+        <div class="chart-legend">
+          <span><i class="legend-temp"></i>温度 (C)</span>
+          <span><i class="legend-pressure"></i>压力 (MPa)</span>
+        </div>
+      </section>
+
+      <section class="panel report-panel">
+        <div class="panel-heading">
+          <h2>聚合测试报告</h2>
+          <div id="report-state" class="muted"></div>
+        </div>
+        <div id="density-grid" class="metric-grid"></div>
+        <div class="subsection">
+          <h3>验收检查</h3>
+          <div id="acceptance-list" class="acceptance-list"></div>
+        </div>
+      </section>
+
+      <section class="panel artifacts-panel">
+        <div class="panel-heading">
+          <h2>结果工件</h2>
+          <span id="artifact-count" class="muted"></span>
+        </div>
+        <div id="artifact-list" class="artifact-list"></div>
+      </section>
+
+      <section class="panel audit-panel">
+        <div class="panel-heading">
+          <h2>下游请求审计</h2>
+          <span id="audit-count" class="muted"></span>
+        </div>
+        <div id="audit-list" class="audit-list"></div>
+        <div id="audit-detail" class="audit-detail"></div>
+      </section>
+
+      <section class="panel logs-panel">
+        <div class="panel-heading">
+          <h2>运行日志</h2>
+          <span id="event-count" class="muted"></span>
+        </div>
+        <div id="event-list" class="event-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
