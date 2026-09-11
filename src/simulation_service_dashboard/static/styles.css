@@ -62,6 +62,37 @@ h1 {
 .connection.online { border-color: #65d2ad; color: #b8f2dc; }
 .connection.offline { border-color: #ff9f9f; color: #ffd8d8; }
 
+.mode-tabs {
+  display: flex;
+  gap: 8px;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 18px 18px 0;
+}
+
+.mode-tab {
+  min-width: 110px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #43575c;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-tab.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: #005c61;
+}
+
+.ansys-layout {
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+
 .layout {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -79,6 +110,7 @@ h1 {
 }
 
 .jobs-panel { align-self: start; position: sticky; top: 16px; }
+.ansys-jobs-panel { align-self: start; position: sticky; top: 16px; }
 
 .workspace {
   min-width: 0;
@@ -362,6 +394,39 @@ h3 {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.log-view {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px 16px;
+  font: 11px/1.6 ui-monospace, SFMono-Regular, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.segment {
+  min-width: 72px;
+  min-height: 26px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segment.active { background: var(--accent); color: #fff; }
 
 .event-list { display: grid; gap: 6px; padding: 12px 16px 16px; }
 .event-row {

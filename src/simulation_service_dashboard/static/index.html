@@ -15,7 +15,12 @@
     <div class="connection" id="connection">连接中</div>
   </header>
 
-  <main class="layout">
+  <nav class="mode-tabs" aria-label="服务视图">
+    <button id="simulation-tab" class="mode-tab active" type="button">上游仿真</button>
+    <button id="ansys-tab" class="mode-tab" type="button">下游 Ansys</button>
+  </nav>
+
+  <main class="layout" id="simulation-view">
     <aside class="panel jobs-panel">
       <div class="panel-heading">
         <h2>仿真任务</h2>
@@ -100,6 +105,64 @@
           <span id="event-count" class="muted"></span>
         </div>
         <div id="event-list" class="event-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <main class="layout ansys-layout hidden" id="ansys-view">
+    <aside class="panel ansys-jobs-panel">
+      <div class="panel-heading">
+        <h2>下游作业</h2>
+        <button id="refresh-ansys" class="icon-button" type="button" title="刷新下游">
+          <span aria-hidden="true">⟳</span>
+        </button>
+      </div>
+      <div id="ansys-job-list" class="job-list"></div>
+    </aside>
+
+    <section class="workspace">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>下游服务状态</h2>
+          <div id="ansys-health-state" class="muted">加载中</div>
+        </div>
+        <div id="ansys-health-grid" class="status-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>作业状态</h2>
+          <div id="ansys-job-state" class="muted">未选择作业</div>
+        </div>
+        <div id="ansys-job-grid" class="status-grid"></div>
+        <div id="ansys-job-error" class="alert hidden"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>作业日志</h2>
+          <div class="segmented">
+            <button id="job-log-tab" class="segment active" type="button">job.log</button>
+            <button id="solver-log-tab" class="segment" type="button">job.out</button>
+          </div>
+        </div>
+        <pre id="ansys-job-log" class="log-view"></pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>服务请求日志</h2>
+          <span id="ansys-service-log-state" class="muted">最新 200 行</span>
+        </div>
+        <pre id="ansys-service-log" class="log-view"></pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>下游工件</h2>
+          <span id="ansys-artifact-count" class="muted"></span>
+        </div>
+        <div id="ansys-artifact-list" class="artifact-list"></div>
       </section>
     </section>
   </main>

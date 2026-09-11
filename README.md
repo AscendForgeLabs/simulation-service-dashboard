@@ -8,12 +8,14 @@ HIP 仿真管理台，用于操作 [simulation-service](https://github.com/Ascen
 - 聚合展示 Ansys 结果、区域致密度和验收检查
 - 下载 `model.inp`、报告和其他工件
 - 逐条查看发往 Ansys 服务的 HTTP 请求与响应审计
+- 直连 `ansys-hip-service`：查看健康状态、队列、作业日志、服务请求日志和工件
 
 ## 配置
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `DASHBOARD_SIMULATION_SERVICE_URL` | `http://dev.htcmc.site` | simulation-service 地址 |
+| `DASHBOARD_ANSYS_SERVICE_URL` | `http://dev.htcmc.site` | ansys-hip-service 地址 |
 | `DASHBOARD_POLLING_INTERVAL_SECONDS` | `3` | 浏览器轮询间隔 |
 | `DASHBOARD_REQUEST_TIMEOUT_SECONDS` | `30` | 后端代理请求超时 |
 
@@ -38,6 +40,7 @@ DASHBOARD_SIMULATION_SERVICE_URL=http://localhost:8000 uv run simulation-service
 docker build -t simulation-service-dashboard .
 docker run --rm -p 8080:8080 \
   -e DASHBOARD_SIMULATION_SERVICE_URL=http://simulation-service:8000 \
+  -e DASHBOARD_ANSYS_SERVICE_URL=http://ansys-hip-service:8000 \
   simulation-service-dashboard
 ```
 

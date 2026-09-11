@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from simulation_service_dashboard.backend import (
+    AnsysServiceBackend,
     BackendUnavailable,
     SimulationServiceBackend,
 )
@@ -29,7 +30,15 @@ def get_backend(request: Request) -> SimulationServiceBackend:
     return backend
 
 
+def get_ansys_backend(request: Request) -> AnsysServiceBackend:
+    backend = request.app.state.ansys_backend
+    if not isinstance(backend, AnsysServiceBackend):
+        raise RuntimeError("Ansys backend is not initialized")
+    return backend
+
+
 Backend = Annotated[SimulationServiceBackend, Depends(get_backend)]
+AnsysBackend = Annotated[AnsysServiceBackend, Depends(get_ansys_backend)]
 
 
 def create_app(
@@ -43,11 +52,18 @@ def create_app(
         timeout=resolved_settings.request_timeout_seconds,
         follow_redirects=True,
     )
+    ansys_http_client = httpx.AsyncClient(
+        base_url=resolved_settings.ansys_service_url,
+        transport=transport,
+        timeout=resolved_settings.request_timeout_seconds,
+        follow_redirects=True,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
         await http_client.aclose()
+        await ansys_http_client.aclose()
 
     app = FastAPI(
         title="Simulation Service Dashboard",
@@ -56,6 +72,7 @@ def create_app(
     )
     app.state.settings = resolved_settings
     app.state.backend = SimulationServiceBackend(http_client)
+    app.state.ansys_backend = AnsysServiceBackend(ansys_http_client)
     app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
 
     @app.get("/", include_in_schema=False)
@@ -145,6 +162,68 @@ def create_app(
                 return record
         raise HTTPException(status_code=404, detail="HTTP audit exchange not found")
 
+    @app.get("/api/ansys/health")
+    async def ansys_health(ansys_backend: AnsysBackend) -> Any:
+        try:
+            return await ansys_backend.health()
+        except BackendUnavailable as error:
+            raise _backend_error(error) from error
+
+    @app.get("/api/ansys/jobs")
+    async def ansys_jobs(ansys_backend: AnsysBackend) -> list[dict[str, Any]]:
+        try:
+            return await ansys_backend.list_jobs()
+        except BackendUnavailable as error:
+            raise _backend_error(error) from error
+
+    @app.get("/api/ansys/jobs/{job_id}/log")
+    async def ansys_job_log(
+        ansys_backend: AnsysBackend,
+        job_id: str,
+        source: str = "job.log",
+    ) -> Response:
+        try:
+            upstream = await ansys_backend.job_log(job_id, source)
+        except BackendUnavailable as error:
+            raise _backend_error(error) from error
+        return _text_response(upstream)
+
+    @app.get("/api/ansys/service-log")
+    async def ansys_service_log(ansys_backend: AnsysBackend) -> Response:
+        try:
+            upstream = await ansys_backend.service_log()
+        except BackendUnavailable as error:
+            raise _backend_error(error) from error
+        return _text_response(upstream)
+
+    @app.get("/api/ansys/jobs/{job_id}/artifacts")
+    async def ansys_artifacts(
+        ansys_backend: AnsysBackend,
+        job_id: str,
+    ) -> list[str]:
+        try:
+            return await ansys_backend.artifacts(job_id)
+        except BackendUnavailable as error:
+            raise _backend_error(error) from error
+
+    @app.get("/api/ansys/jobs/{job_id}/artifacts/{artifact_name}")
+    async def ansys_artifact(
+        ansys_backend: AnsysBackend,
+        job_id: str,
+        artifact_name: str,
+    ) -> Response:
+        try:
+            upstream = await ansys_backend.artifact(job_id, artifact_name)
+        except BackendUnavailable as error:
+            raise _backend_error(error) from error
+        if upstream.is_error:
+            raise _upstream_error({"detail": upstream.text})
+        return Response(
+            content=upstream.content,
+            media_type=upstream.headers.get("content-type", "application/octet-stream"),
+            headers={"Content-Disposition": f'attachment; filename="{artifact_name}"'},
+        )
+
     return app
 
 
@@ -184,3 +263,12 @@ def _backend_error(error: BackendUnavailable) -> HTTPException:
 
 def _upstream_error(detail: Any) -> HTTPException:
     return HTTPException(status_code=502, detail={"upstream": detail})
+
+
+def _text_response(upstream: httpx.Response) -> Response:
+    if upstream.is_error:
+        raise _upstream_error({"detail": upstream.text})
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("content-type", "text/plain"),
+    )

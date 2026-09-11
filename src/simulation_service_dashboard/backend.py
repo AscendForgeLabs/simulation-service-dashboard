@@ -51,3 +51,41 @@ class SimulationServiceBackend:
         if response.status_code >= 500:
             raise BackendUnavailable("Simulation service returned a server error")
         return response
+
+
+class AnsysServiceBackend:
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self.client = client
+
+    async def _request(self, path: str, **kwargs: Any) -> httpx.Response:
+        try:
+            response = await self.client.get(path, **kwargs)
+        except httpx.HTTPError as error:
+            raise BackendUnavailable("Cannot reach ansys-hip-service") from error
+        if response.status_code >= 500:
+            raise BackendUnavailable("ansys-hip-service returned a server error")
+        return response
+
+    async def _json(self, path: str) -> Any:
+        return (await self._request(path)).json()
+
+    async def health(self) -> dict[str, Any]:
+        health = await self._json("/health")
+        return health if isinstance(health, dict) else {}
+
+    async def list_jobs(self) -> list[dict[str, Any]]:
+        jobs = await self._json("/jobs")
+        return jobs if isinstance(jobs, list) else []
+
+    async def job_log(self, job_id: str, source: str = "job.log") -> httpx.Response:
+        return await self._request(f"/jobs/{job_id}/log", params={"source": source})
+
+    async def service_log(self) -> httpx.Response:
+        return await self._request("/service/log")
+
+    async def artifacts(self, job_id: str) -> list[str]:
+        names = await self._json(f"/jobs/{job_id}/artifacts")
+        return names if isinstance(names, list) else []
+
+    async def artifact(self, job_id: str, name: str) -> httpx.Response:
+        return await self._request(f"/jobs/{job_id}/artifacts/{name}")

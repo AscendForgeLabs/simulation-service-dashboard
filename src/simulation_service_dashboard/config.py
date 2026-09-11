@@ -2,7 +2,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    simulation_service_url: str = "http://dev.htcmc.site"
+    simulation_service_url: str = "http://localhost:8000"
+    ansys_service_url: str = "http://dev.htcmc.site"
     polling_interval_seconds: float = 3
     request_timeout_seconds: float = 30
 

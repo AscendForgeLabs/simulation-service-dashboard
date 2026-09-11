@@ -5,6 +5,10 @@ const state = {
   audit: [],
   selectedAudit: null,
   pollTimer: null,
+  activeView: "simulation",
+  ansysJobs: [],
+  selectedAnsysJobId: null,
+  ansysLogSource: "job.log",
 };
 
 const elements = {
@@ -27,6 +31,24 @@ const elements = {
   auditCount: document.querySelector("#audit-count"),
   eventList: document.querySelector("#event-list"),
   eventCount: document.querySelector("#event-count"),
+  simulationTab: document.querySelector("#simulation-tab"),
+  ansysTab: document.querySelector("#ansys-tab"),
+  simulationView: document.querySelector("#simulation-view"),
+  ansysView: document.querySelector("#ansys-view"),
+  refreshAnsys: document.querySelector("#refresh-ansys"),
+  ansysJobList: document.querySelector("#ansys-job-list"),
+  ansysHealthState: document.querySelector("#ansys-health-state"),
+  ansysHealthGrid: document.querySelector("#ansys-health-grid"),
+  ansysJobState: document.querySelector("#ansys-job-state"),
+  ansysJobGrid: document.querySelector("#ansys-job-grid"),
+  ansysJobError: document.querySelector("#ansys-job-error"),
+  ansysJobLog: document.querySelector("#ansys-job-log"),
+  ansysServiceLog: document.querySelector("#ansys-service-log"),
+  ansysServiceLogState: document.querySelector("#ansys-service-log-state"),
+  ansysArtifactList: document.querySelector("#ansys-artifact-list"),
+  ansysArtifactCount: document.querySelector("#ansys-artifact-count"),
+  jobLogTab: document.querySelector("#job-log-tab"),
+  solverLogTab: document.querySelector("#solver-log-tab"),
 };
 
 async function request(path, options = {}) {
@@ -42,6 +64,12 @@ async function request(path, options = {}) {
     throw new Error(message);
   }
   return response.json();
+}
+
+async function requestText(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
 }
 
 async function loadJobs() {
@@ -105,6 +133,63 @@ async function selectAudit(sequence) {
   }
 }
 
+async function loadAnsys() {
+  try {
+    const [health, jobs, serviceLog] = await Promise.all([
+      request("/api/ansys/health"),
+      request("/api/ansys/jobs"),
+      requestText("/api/ansys/service-log"),
+    ]);
+    renderAnsysHealth(health);
+    state.ansysJobs = jobs;
+    elements.ansysServiceLog.textContent = serviceLog.split("\n").slice(-200).join("\n");
+    setConnection(true, "下游可用");
+  } catch (error) {
+    elements.ansysHealthState.textContent = "连接失败";
+    state.ansysJobs = [];
+    elements.ansysServiceLog.textContent = error.message;
+    setConnection(false, "下游不可用");
+  }
+  renderAnsysJobs();
+  if (!state.selectedAnsysJobId && state.ansysJobs.length > 0) {
+    await selectAnsysJob(state.ansysJobs[0].id);
+  }
+}
+
+async function selectAnsysJob(jobId) {
+  state.selectedAnsysJobId = jobId;
+  renderAnsysJobs();
+  await loadAnsysJobDetail();
+}
+
+async function loadAnsysJobDetail() {
+  const jobId = state.selectedAnsysJobId;
+  if (!jobId) return;
+  const job = state.ansysJobs.find((item) => item.id === jobId);
+  renderAnsysJob(job);
+  try {
+    const [jobLog, artifacts] = await Promise.all([
+      requestText(`/api/ansys/jobs/${jobId}/log?source=${state.ansysLogSource}`),
+      request(`/api/ansys/jobs/${jobId}/artifacts`),
+    ]);
+    elements.ansysJobLog.textContent = jobLog;
+    renderAnsysArtifacts(jobId, artifacts);
+  } catch (error) {
+    elements.ansysJobLog.textContent = error.message;
+    renderAnsysArtifacts(jobId, []);
+  }
+}
+
+function switchView(view) {
+  state.activeView = view;
+  const simulationActive = view === "simulation";
+  elements.simulationTab.classList.toggle("active", simulationActive);
+  elements.ansysTab.classList.toggle("active", !simulationActive);
+  elements.simulationView.classList.toggle("hidden", !simulationActive);
+  elements.ansysView.classList.toggle("hidden", simulationActive);
+  setConnection(simulationActive, "上游未连接", false);
+}
+
 async function submitSimulation(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -159,6 +244,34 @@ function renderJobs() {
   );
 }
 
+function renderAnsysJobs() {
+  if (state.ansysJobs.length === 0) {
+    elements.ansysJobList.innerHTML = '<div class="empty">暂无下游作业</div>';
+    return;
+  }
+  elements.ansysJobList.replaceChildren(
+    ...state.ansysJobs.map((job) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `job-item${job.id === state.selectedAnsysJobId ? " selected" : ""}`;
+      const title = document.createElement("div");
+      title.className = "job-title";
+      const status = document.createElement("strong");
+      status.textContent = job.status;
+      const time = document.createElement("span");
+      time.className = "job-created";
+      time.textContent = formatTime(job.created_at);
+      title.append(status, time);
+      const id = document.createElement("div");
+      id.className = "job-id";
+      id.textContent = job.id;
+      button.append(title, id);
+      button.addEventListener("click", () => selectAnsysJob(job.id));
+      return button;
+    })
+  );
+}
+
 function renderDetail() {
   const detail = state.detail;
   if (!detail) {
@@ -201,6 +314,62 @@ function renderDetail() {
   renderReport(detail);
   renderArtifacts(detail.result?.artifacts || {});
   renderEvents(detail.events || []);
+}
+
+function renderAnsysHealth(health) {
+  elements.ansysHealthState.textContent = health.status || "-";
+  const fields = [
+    ["服务状态", health.status],
+    ["MAPDL", health.mapdl_found ? "可用" : "不可用"],
+    ["License", health.license_env_set ? "可用" : "不可用"],
+    ["Passthrough", health.passthrough_enabled ? "开启" : "关闭"],
+    ["运行队列", health.queue_running],
+    ["等待队列", health.queue_pending],
+    ["版本", health.version],
+  ];
+  renderStatusCards(elements.ansysHealthGrid, fields);
+}
+
+function renderAnsysJob(job) {
+  if (!job) {
+    elements.ansysJobState.textContent = "未选择作业";
+    elements.ansysJobGrid.innerHTML = "";
+    return;
+  }
+  elements.ansysJobState.textContent = job.status;
+  const fields = [
+    ["作业 ID", job.id],
+    ["方法", job.method],
+    ["状态", job.status],
+    ["保真度", job.fidelity || "-"],
+    ["创建时间", formatTime(job.created_at)],
+    ["开始时间", formatTime(job.started_at)],
+    ["结束时间", formatTime(job.finished_at)],
+  ];
+  renderStatusCards(elements.ansysJobGrid, fields);
+  if (job.error) {
+    elements.ansysJobError.textContent = `${job.error.code}: ${job.error.message}`;
+    elements.ansysJobError.classList.remove("hidden");
+  } else {
+    elements.ansysJobError.classList.add("hidden");
+  }
+}
+
+function renderStatusCards(container, fields) {
+  container.replaceChildren(
+    ...fields.map(([label, value]) => {
+      const card = document.createElement("div");
+      card.className = "status-card";
+      const labelElement = document.createElement("div");
+      labelElement.className = "status-label";
+      labelElement.textContent = label;
+      const valueElement = document.createElement("div");
+      valueElement.className = `status-value ${String(value).toLowerCase()}`;
+      valueElement.textContent = value ?? "-";
+      card.append(labelElement, valueElement);
+      return card;
+    })
+  );
 }
 
 function renderProcess(process) {
@@ -376,6 +545,29 @@ function renderArtifacts(artifacts) {
   );
 }
 
+function renderAnsysArtifacts(jobId, names) {
+  elements.ansysArtifactCount.textContent = `${names.length} 个文件`;
+  if (names.length === 0) {
+    elements.ansysArtifactList.innerHTML = '<div class="empty">暂无工件</div>';
+    return;
+  }
+  elements.ansysArtifactList.replaceChildren(
+    ...names.map((name) => {
+      const link = document.createElement("a");
+      link.className = "artifact-link";
+      link.href = `/api/ansys/jobs/${jobId}/artifacts/${encodeURIComponent(name)}`;
+      const filename = document.createElement("span");
+      filename.className = "filename";
+      filename.textContent = name;
+      const kind = document.createElement("span");
+      kind.className = "kind";
+      kind.textContent = name.split(".").pop();
+      link.append(filename, kind);
+      return link;
+    })
+  );
+}
+
 function renderAudit() {
   elements.auditCount.textContent = `${state.audit.length} 条请求`;
   if (state.audit.length === 0) {
@@ -467,17 +659,37 @@ function formatNumber(value) {
 function schedulePolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(async () => {
-    await loadJobs();
-    if (state.selectedJobId) await refreshDetail();
+    if (state.activeView === "simulation") {
+      await loadJobs();
+      if (state.selectedJobId) await refreshDetail();
+    } else {
+      await loadAnsys();
+    }
   }, 3000);
 }
 
 elements.uploadForm.addEventListener("submit", submitSimulation);
 elements.refreshJobs.addEventListener("click", loadJobs);
+elements.ansysTab.addEventListener("click", () => {
+  switchView("ansys");
+  loadAnsys();
+});
+elements.simulationTab.addEventListener("click", () => switchView("simulation"));
+elements.refreshAnsys.addEventListener("click", loadAnsys);
+elements.jobLogTab.addEventListener("click", () => setAnsysLogSource("job.log"));
+elements.solverLogTab.addEventListener("click", () => setAnsysLogSource("job.out"));
+
+function setAnsysLogSource(source) {
+  state.ansysLogSource = source;
+  elements.jobLogTab.classList.toggle("active", source === "job.log");
+  elements.solverLogTab.classList.toggle("active", source === "job.out");
+  loadAnsysJobDetail();
+}
 window.addEventListener("popstate", () => {
   const jobId = new URLSearchParams(window.location.search).get("job");
   if (jobId && jobId !== state.selectedJobId) selectJob(jobId, false);
 });
 
 await loadJobs();
+loadAnsys();
 schedulePolling();
