@@ -57,6 +57,10 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 6px;
   font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
 }
 
 .connection.online { border-color: #65d2ad; color: #b8f2dc; }
@@ -395,6 +399,46 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.interface-result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.interface-result-grid h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.interface-results {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.interface-result {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f9f9;
+}
+
+.interface-result summary {
+  padding: 9px 12px;
+  cursor: pointer;
+  font: 11px ui-monospace, SFMono-Regular, monospace;
+  color: var(--accent);
+}
+
+.interface-result .json-view {
+  max-height: 260px;
+  margin: 0 12px 12px;
+}
+
+@media (max-width: 800px) {
+  .interface-result-grid { grid-template-columns: 1fr; }
+}
+
 .log-view {
   max-height: 320px;
   overflow: auto;
@@ -403,6 +447,36 @@ h3 {
   font: 11px/1.6 ui-monospace, SFMono-Regular, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.workflow-note {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workflow-note strong {
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.log-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.log-controls input {
+  width: min(240px, 35vw);
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
 }
 
 .segmented {
