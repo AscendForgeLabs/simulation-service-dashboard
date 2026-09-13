@@ -9,6 +9,10 @@ const state = {
   ansysJobs: [],
   selectedAnsysJobId: null,
   ansysLogSource: "job.log",
+  ansysServiceLogText: "",
+  ansysServiceLogQuery: "",
+  ansysInterfaceResponses: new Map(),
+  pollingInFlight: false,
 };
 
 const elements = {
@@ -38,12 +42,18 @@ const elements = {
   refreshAnsys: document.querySelector("#refresh-ansys"),
   ansysJobList: document.querySelector("#ansys-job-list"),
   ansysHealthState: document.querySelector("#ansys-health-state"),
+  ansysMethodsState: document.querySelector("#ansys-methods-state"),
   ansysHealthGrid: document.querySelector("#ansys-health-grid"),
+  ansysInterfaceResults: document.querySelector("#ansys-interface-results"),
   ansysJobState: document.querySelector("#ansys-job-state"),
   ansysJobGrid: document.querySelector("#ansys-job-grid"),
   ansysJobError: document.querySelector("#ansys-job-error"),
+  ansysResultState: document.querySelector("#ansys-result-state"),
+  ansysJobResponse: document.querySelector("#ansys-job-response"),
+  ansysResultResponse: document.querySelector("#ansys-result-response"),
   ansysJobLog: document.querySelector("#ansys-job-log"),
   ansysServiceLog: document.querySelector("#ansys-service-log"),
+  ansysServiceLogSearch: document.querySelector("#ansys-service-log-search"),
   ansysServiceLogState: document.querySelector("#ansys-service-log-state"),
   ansysArtifactList: document.querySelector("#ansys-artifact-list"),
   ansysArtifactCount: document.querySelector("#ansys-artifact-count"),
@@ -135,22 +145,38 @@ async function selectAudit(sequence) {
 
 async function loadAnsys() {
   try {
-    const [health, jobs, serviceLog] = await Promise.all([
+    const [health, methods, jobs, serviceLog] = await Promise.all([
       request("/api/ansys/health"),
+      request("/api/ansys/methods"),
       request("/api/ansys/jobs"),
       requestText("/api/ansys/service-log"),
     ]);
     renderAnsysHealth(health);
+    recordInterfaceResponse("GET /health", health);
+    const methodNames = Array.isArray(methods)
+      ? methods.map((method) => method.name || method.id || String(method))
+      : methods.methods || methods.available_methods || [];
+    elements.ansysMethodsState.textContent = methodNames.length
+      ? ` · 方法: ${methodNames.join(", ")}`
+      : "";
+    recordInterfaceResponse("GET /sim/methods", methods);
     state.ansysJobs = jobs;
-    elements.ansysServiceLog.textContent = serviceLog.split("\n").slice(-200).join("\n");
+    recordInterfaceResponse("GET /jobs", jobs);
+    state.ansysServiceLogText = serviceLog;
+    recordInterfaceResponse("GET /service/log?tail=500", serviceLog);
+    renderAnsysServiceLog();
     setConnection(true, "下游可用");
   } catch (error) {
     elements.ansysHealthState.textContent = "连接失败";
+    elements.ansysMethodsState.textContent = "";
+    recordInterfaceResponse("GET /health", { error: error.message });
     state.ansysJobs = [];
-    elements.ansysServiceLog.textContent = error.message;
+    state.ansysServiceLogText = error.message;
+    renderAnsysServiceLog();
     setConnection(false, "下游不可用");
   }
   renderAnsysJobs();
+  renderInterfaceResults();
   if (!state.selectedAnsysJobId && state.ansysJobs.length > 0) {
     await selectAnsysJob(state.ansysJobs[0].id);
   }
@@ -158,6 +184,11 @@ async function loadAnsys() {
 
 async function selectAnsysJob(jobId) {
   state.selectedAnsysJobId = jobId;
+  for (const endpoint of state.ansysInterfaceResponses.keys()) {
+    if (endpoint.startsWith("GET /jobs/")) {
+      state.ansysInterfaceResponses.delete(endpoint);
+    }
+  }
   renderAnsysJobs();
   await loadAnsysJobDetail();
 }
@@ -167,17 +198,55 @@ async function loadAnsysJobDetail() {
   if (!jobId) return;
   const job = state.ansysJobs.find((item) => item.id === jobId);
   renderAnsysJob(job);
-  try {
-    const [jobLog, artifacts] = await Promise.all([
-      requestText(`/api/ansys/jobs/${jobId}/log?source=${state.ansysLogSource}`),
-      request(`/api/ansys/jobs/${jobId}/artifacts`),
-    ]);
-    elements.ansysJobLog.textContent = jobLog;
-    renderAnsysArtifacts(jobId, artifacts);
-  } catch (error) {
-    elements.ansysJobLog.textContent = error.message;
-    renderAnsysArtifacts(jobId, []);
+  elements.ansysResultState.textContent = "加载中";
+  const responses = await Promise.allSettled([
+    requestText(
+      `/api/ansys/jobs/${jobId}/log?source=${encodeURIComponent(state.ansysLogSource)}`
+    ),
+    request(`/api/ansys/jobs/${jobId}/artifacts`),
+    request(`/api/ansys/jobs/${jobId}`),
+    request(`/api/ansys/jobs/${jobId}/result`),
+  ]);
+  const [jobLog, artifacts, jobResponse, resultResponse] = responses;
+  if (jobLog.status === "fulfilled") {
+    elements.ansysJobLog.textContent = jobLog.value;
+    recordInterfaceResponse(
+      `GET /jobs/${jobId}/log?source=${state.ansysLogSource}&tail=500`,
+      jobLog.value
+    );
+  } else {
+    elements.ansysJobLog.textContent = jobLog.reason.message;
+    recordInterfaceResponse(
+      `GET /jobs/${jobId}/log?source=${state.ansysLogSource}&tail=500`,
+      jobLog.reason.message
+    );
   }
+  renderAnsysArtifacts(jobId, artifacts.status === "fulfilled" ? artifacts.value : []);
+  recordInterfaceResponse(
+    `GET /jobs/${jobId}/artifacts`,
+    artifacts.status === "fulfilled" ? artifacts.value : artifacts.reason.message
+  );
+  recordInterfaceResponse(
+    `GET /jobs/${jobId}`,
+    jobResponse.status === "fulfilled" ? jobResponse.value : jobResponse.reason.message
+  );
+  recordInterfaceResponse(
+    `GET /jobs/${jobId}/result`,
+    resultResponse.status === "fulfilled" ? resultResponse.value : resultResponse.reason.message
+  );
+  renderJsonResponse(
+    elements.ansysJobResponse,
+    jobResponse.status === "fulfilled" ? jobResponse.value : jobResponse.reason.message
+  );
+  renderJsonResponse(
+    elements.ansysResultResponse,
+    resultResponse.status === "fulfilled" ? resultResponse.value : resultResponse.reason.message
+  );
+  elements.ansysResultState.textContent =
+    jobResponse.status === "fulfilled" && resultResponse.status === "fulfilled"
+      ? "已加载"
+      : "部分结果不可用";
+  renderInterfaceResults();
 }
 
 function switchView(view) {
@@ -353,6 +422,46 @@ function renderAnsysJob(job) {
   } else {
     elements.ansysJobError.classList.add("hidden");
   }
+}
+
+function renderAnsysServiceLog() {
+  const query = state.ansysServiceLogQuery.trim().toLowerCase();
+  const lines = state.ansysServiceLogText.split("\n");
+  elements.ansysServiceLog.textContent = query
+    ? lines.filter((line) => line.toLowerCase().includes(query)).join("\n")
+    : state.ansysServiceLogText;
+}
+
+function renderJsonResponse(element, value) {
+  element.textContent = JSON.stringify(value, null, 2);
+}
+
+function recordInterfaceResponse(endpoint, response) {
+  state.ansysInterfaceResponses.set(endpoint, response);
+}
+
+function renderInterfaceResults() {
+  const openEndpoints = new Set(
+    [...elements.ansysInterfaceResults.querySelectorAll("details[open]")]
+      .map((details) => details.dataset.endpoint)
+  );
+  elements.ansysInterfaceResults.replaceChildren(
+    ...[...state.ansysInterfaceResponses.entries()].map(([endpoint, response]) => {
+      const card = document.createElement("details");
+      card.className = "interface-result";
+      card.dataset.endpoint = endpoint;
+      card.open = openEndpoints.has(endpoint);
+      const summary = document.createElement("summary");
+      summary.textContent = endpoint;
+      const body = document.createElement("pre");
+      body.className = "json-view";
+      body.textContent = typeof response === "string"
+        ? response
+        : JSON.stringify(response, null, 2);
+      card.append(summary, body);
+      return card;
+    })
+  );
 }
 
 function renderStatusCards(container, fields) {
@@ -658,7 +767,7 @@ function statusText(status) {
 
 function formatTime(value) {
   if (!value) return "-";
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  return new Date(value).toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" });
 }
 
 function formatNumber(value) {
@@ -670,11 +779,17 @@ function formatNumber(value) {
 function schedulePolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(async () => {
-    if (state.activeView === "simulation") {
-      await loadJobs();
-      if (state.selectedJobId) await refreshDetail();
-    } else {
-      await loadAnsys();
+    if (state.pollingInFlight) return;
+    state.pollingInFlight = true;
+    try {
+      if (state.activeView === "simulation") {
+        await loadJobs();
+        if (state.selectedJobId) await refreshDetail();
+      } else {
+        await loadAnsys();
+      }
+    } finally {
+      state.pollingInFlight = false;
     }
   }, 3000);
 }
@@ -687,6 +802,10 @@ elements.ansysTab.addEventListener("click", () => {
 });
 elements.simulationTab.addEventListener("click", () => switchView("simulation"));
 elements.refreshAnsys.addEventListener("click", loadAnsys);
+elements.ansysServiceLogSearch.addEventListener("input", (event) => {
+  state.ansysServiceLogQuery = event.target.value;
+  renderAnsysServiceLog();
+});
 elements.jobLogTab.addEventListener("click", () => setAnsysLogSource("job.log"));
 elements.solverLogTab.addEventListener("click", () => setAnsysLogSource("job.out"));
 
