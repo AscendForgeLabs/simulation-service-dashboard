@@ -767,7 +767,8 @@ function statusText(status) {
 
 function formatTime(value) {
   if (!value) return "-";
-  return new Date(value).toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" });
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`;
+  return new Date(normalized).toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" });
 }
 
 function formatNumber(value) {
